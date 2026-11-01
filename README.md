@@ -10,13 +10,23 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Set `NEXT_PUBLIC_SITE_URL` to the canonical production origin before deployment.
+Open [http://localhost:3000](http://localhost:3000). Set `NEXT_PUBLIC_SITE_URL` to the canonical production origin before deployment. Add the database and SMTP settings below to `.env.local`; never commit real credentials.
 
 ## Inquiry delivery
 
-The form submits to `/api/inquiries`. Set `INQUIRY_WEBHOOK_URL` to an HTTPS endpoint connected to your team's inquiry workflow. The endpoint receives a JSON `workspace_inquiry` event with the submitted contact and workspace details. Requests are not stored by this app; without a webhook, the form reports that online requests are unavailable instead of claiming a submission succeeded.
+The form submits to `/api/inquiries`. The endpoint validates and saves each inquiry in the `inquiries` collection of the `vobyarinnovate` MongoDB database, then emails the configured admin address using SMTP. The record is saved before email delivery, so a notification failure does not discard the inquiry and is reported to the submitter.
 
-Before launch, confirm the service descriptions, plan details, supported cities, prices, privacy notice, and webhook destination match the business. The current plan tiers are quote-based examples.
+Configure these server-side environment variables in `.env.local` and in your deployment environment:
+
+- `MONGODB_URL` - MongoDB connection string. Use a rotated credential, and allow your app's network access in MongoDB Atlas.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` - SMTP server connection and credentials.
+- `SMTP_SECURE` - set to `SSL`/`TLS` for implicit TLS, or `STARTTLS` for a connection upgraded with STARTTLS. If omitted, port `465` defaults to implicit TLS.
+- `SMTP_FROM` - verified sender address/name accepted by your SMTP provider.
+- `ADMIN_EMAIL` - destination for new inquiry notifications.
+
+The form will report an error if MongoDB or SMTP is not configured or available; notification errors are logged server-side. Keep these values private and do not use a `NEXT_PUBLIC_` prefix for secrets.
+
+Before launch, confirm the service descriptions, plan details, supported cities, prices, privacy notice, and email destination match the business. The current plan tiers are quote-based examples.
 
 ## Project layout
 
@@ -34,4 +44,4 @@ Before launch, confirm the service descriptions, plan details, supported cities,
 - `npm run start` - serve the production build
 - `npm run lint` - run ESLint
 
-There is no customer account portal, admin dashboard, database, or payment integration yet. Add those after the launch inquiry workflow and business requirements are validated.
+There is no customer account portal, admin dashboard, or payment integration yet. Inquiries are stored in MongoDB and emailed to the configured admin address.

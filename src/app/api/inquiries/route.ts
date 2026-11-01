@@ -1,3 +1,6 @@
+import { sendInquiryNotification } from "@/lib/inquiry-email";
+import { getDatabase } from "@/lib/mongodb";
+
 const allowedServices = new Set([
   "Coworking day pass",
   "Flexible desk membership",
@@ -84,47 +87,32 @@ export async function POST(request: Request) {
     return errorResponse("Please check the required fields and try again.", 400);
   }
 
-  const webhookUrl = process.env.INQUIRY_WEBHOOK_URL;
-  if (!webhookUrl) {
+  try {
+    const database = await getDatabase();
+    await database.collection("inquiries").insertOne({
+      ...inquiry,
+      submittedAt: new Date(),
+    });
+
+    try {
+      await sendInquiryNotification(inquiry);
+    } catch (error) {
+      console.error("Inquiry was saved, but its email notification failed.", error);
+      return errorResponse(
+        "Your inquiry was saved, but we couldn't notify our team. Please contact us directly.",
+        502,
+      );
+    }
+
+    return Response.json(
+      { ok: true, message: "Your request has been sent. Our team will follow up." },
+      { status: 201, headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    console.error("Failed to save workspace inquiry.", error);
     return errorResponse(
-      "Online requests are being set up. Please try again later.",
+      "We could not save your request. Please try again later.",
       503,
     );
   }
-
-  let destination: URL;
-  try {
-    destination = new URL(webhookUrl);
-  } catch {
-    return errorResponse("Request delivery is temporarily unavailable.", 503);
-  }
-
-  if (destination.protocol !== "https:") {
-    return errorResponse("Request delivery is temporarily unavailable.", 503);
-  }
-
-  try {
-    const delivery = await fetch(destination, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "workspace_inquiry",
-        submittedAt: new Date().toISOString(),
-        ...inquiry,
-      }),
-      redirect: "error",
-      signal: AbortSignal.timeout(8_000),
-    });
-
-    if (!delivery.ok) {
-      return errorResponse("We could not send your request. Please try again.", 502);
-    }
-  } catch {
-    return errorResponse("We could not send your request. Please try again.", 502);
-  }
-
-  return Response.json(
-    { ok: true, message: "Your request has been sent. Our team will follow up." },
-    { status: 201, headers: { "Cache-Control": "no-store" } },
-  );
 }
